@@ -44,10 +44,10 @@ NS_ASSUME_NONNULL_BEGIN
 @property (readonly, nonatomic, assign) AFSSLPinningMode SSLPinningMode;
 
 /**
- The certificates used to evaluate server trust according to the SSL pinning mode. 
+ The certificates used to evaluate server trust according to the SSL pinning mode.
 
   By default, this property is set to any (`.cer`) certificates included in the target compiling AFNetworking. Note that if you are using AFNetworking as embedded framework, no certificates will be pinned by default. Use `certificatesInBundle` to load certificates from your target, and then create a new policy by calling `policyWithPinningMode:withPinnedCertificates`.
- 
+
  Note that if pinning is enabled, `evaluateServerTrust:forDomain:` will return true if any pinned certificate matches.
  */
 @property (nonatomic, strong, nullable) NSSet <NSData *> *pinnedCertificates;
@@ -56,6 +56,11 @@ NS_ASSUME_NONNULL_BEGIN
  Whether or not to trust servers with an invalid or expired SSL certificates. Defaults to `NO`.
  */
 @property (nonatomic, assign) BOOL allowInvalidCertificates;
+
+/**
+ Whether or not to trust self signed certificates.
+ */
+@property (nonatomic, assign) BOOL allowSelfSigned;
 
 /**
  Whether or not to validate the domain name in the certificate's CN field. Defaults to `YES`.

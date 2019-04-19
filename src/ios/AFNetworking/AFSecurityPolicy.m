@@ -256,7 +256,7 @@ static NSArray * AFPublicKeyTrustChainForServerTrust(SecTrustRef serverTrust) {
 
     if (self.SSLPinningMode == AFSSLPinningModeNone) {
         return self.allowInvalidCertificates || AFServerTrustIsValid(serverTrust);
-    } else if (!AFServerTrustIsValid(serverTrust) && !self.allowInvalidCertificates) {
+    } else if (!AFServerTrustIsValid(serverTrust) && !self.allowInvalidCertificates && !self.allowSelfSigned) {
         return NO;
     }
 
@@ -327,6 +327,7 @@ static NSArray * AFPublicKeyTrustChainForServerTrust(SecTrustRef serverTrust) {
     self.allowInvalidCertificates = [decoder decodeBoolForKey:NSStringFromSelector(@selector(allowInvalidCertificates))];
     self.validatesDomainName = [decoder decodeBoolForKey:NSStringFromSelector(@selector(validatesDomainName))];
     self.pinnedCertificates = [decoder decodeObjectOfClass:[NSArray class] forKey:NSStringFromSelector(@selector(pinnedCertificates))];
+    self.allowSelfSigned = [decoder decodeBoolForKey:NSStringFromSelector(@selector(allowSelfSigned))];
 
     return self;
 }
@@ -336,6 +337,7 @@ static NSArray * AFPublicKeyTrustChainForServerTrust(SecTrustRef serverTrust) {
     [coder encodeBool:self.allowInvalidCertificates forKey:NSStringFromSelector(@selector(allowInvalidCertificates))];
     [coder encodeBool:self.validatesDomainName forKey:NSStringFromSelector(@selector(validatesDomainName))];
     [coder encodeObject:self.pinnedCertificates forKey:NSStringFromSelector(@selector(pinnedCertificates))];
+    [coder encodeBool:self.allowSelfSigned forKey:NSStringFromSelector(@selector(allowSelfSigned))];
 }
 
 #pragma mark - NSCopying
@@ -346,6 +348,7 @@ static NSArray * AFPublicKeyTrustChainForServerTrust(SecTrustRef serverTrust) {
     securityPolicy.allowInvalidCertificates = self.allowInvalidCertificates;
     securityPolicy.validatesDomainName = self.validatesDomainName;
     securityPolicy.pinnedCertificates = [self.pinnedCertificates copyWithZone:zone];
+    securityPolicy.allowSelfSigned = self.allowSelfSigned;
 
     return securityPolicy;
 }
