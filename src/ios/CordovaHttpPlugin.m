@@ -1,5 +1,6 @@
 #import "CordovaHttpPlugin.h"
 #import "CDVFile.h"
+#import "BinaryResponseSerializer.h"
 #import "TextResponseSerializer.h"
 #import "TextRequestSerializer.h"
 #import "AFHTTPSessionManager.h"
@@ -57,6 +58,15 @@
     [manager.requestSerializer setTimeoutInterval:timeout];
 }
 
+- (void)setResponseSerializer:(NSString*)responseType forManager:(AFHTTPSessionManager*)manager {
+    if ([responseType isEqualToString: @"text"]) {
+        manager.responseSerializer = [TextResponseSerializer serializer];
+    } else {
+        manager.responseSerializer = [BinaryResponseSerializer serializer];
+    }
+}
+
+
 - (void)handleSuccess:(NSMutableDictionary*)dictionary withResponse:(NSHTTPURLResponse*)response andData:(id)data {
     if (response != nil) {
         [dictionary setValue:response.URL.absoluteString forKey:@"url"];
@@ -74,8 +84,8 @@
         [dictionary setValue:response.URL.absoluteString forKey:@"url"];
         [dictionary setObject:[NSNumber numberWithInt:(int)response.statusCode] forKey:@"status"];
         [dictionary setObject:[self copyHeaderFields:response.allHeaderFields] forKey:@"headers"];
-        if (error.userInfo[AFNetworkingOperationFailingURLResponseBodyKey]) {
-            [dictionary setObject:error.userInfo[AFNetworkingOperationFailingURLResponseBodyKey] forKey:@"error"];
+        if (error.userInfo[AFNetworkingOperationFailingURLResponseBodyErrorKey]) {
+            [dictionary setObject:error.userInfo[AFNetworkingOperationFailingURLResponseBodyErrorKey] forKey:@"error"];
         }
     } else {
         [dictionary setObject:[self getStatusCode:error] forKey:@"status"];
@@ -162,14 +172,15 @@
     NSDictionary *headers = [command.arguments objectAtIndex:1];
     NSTimeInterval timeoutInSeconds = [[command.arguments objectAtIndex:2] doubleValue];
     bool followRedirect = [[command.arguments objectAtIndex:3] boolValue];
+    NSString *responseType = [command.arguments objectAtIndex:4];
 
     [self setRequestSerializer: @"default" forManager: manager];
     [self setRequestHeaders: headers forManager: manager];
     [self setTimeout:timeoutInSeconds forManager:manager];
     [self setRedirect:followRedirect forManager:manager];
+    [self setResponseSerializer:responseType forManager:manager];
 
     CordovaHttpPlugin* __weak weakSelf = self;
-    manager.responseSerializer = [TextResponseSerializer serializer];
     [[SDNetworkActivityIndicator sharedActivityIndicator] startActivity];
 
     @try {
@@ -198,6 +209,7 @@
 - (void)head:(CDVInvokedUrlCommand*)command {
     AFHTTPSessionManager *manager = [AFHTTPSessionManager manager];
     manager.securityPolicy = securityPolicy;
+    manager.responseSerializer = [AFHTTPResponseSerializer serializer];
 
     NSString *url = [command.arguments objectAtIndex:0];
     NSDictionary *headers = [command.arguments objectAtIndex:1];
@@ -209,7 +221,6 @@
     [self setRedirect:followRedirect forManager:manager];
 
     CordovaHttpPlugin* __weak weakSelf = self;
-    manager.responseSerializer = [AFHTTPResponseSerializer serializer];
     [[SDNetworkActivityIndicator sharedActivityIndicator] startActivity];
 
     @try {
@@ -244,14 +255,15 @@
     NSDictionary *headers = [command.arguments objectAtIndex:1];
     NSTimeInterval timeoutInSeconds = [[command.arguments objectAtIndex:2] doubleValue];
     bool followRedirect = [[command.arguments objectAtIndex:3] boolValue];
+    NSString *responseType = [command.arguments objectAtIndex:4];
 
     [self setRequestSerializer: @"default" forManager: manager];
     [self setRequestHeaders: headers forManager: manager];
     [self setTimeout:timeoutInSeconds forManager:manager];
     [self setRedirect:followRedirect forManager:manager];
+    [self setResponseSerializer:responseType forManager:manager];
 
     CordovaHttpPlugin* __weak weakSelf = self;
-    manager.responseSerializer = [TextResponseSerializer serializer];
     [[SDNetworkActivityIndicator sharedActivityIndicator] startActivity];
 
     @try {
@@ -287,14 +299,15 @@
     NSDictionary *headers = [command.arguments objectAtIndex:3];
     NSTimeInterval timeoutInSeconds = [[command.arguments objectAtIndex:4] doubleValue];
     bool followRedirect = [[command.arguments objectAtIndex:5] boolValue];
+    NSString *responseType = [command.arguments objectAtIndex:6];
 
     [self setRequestSerializer: serializerName forManager: manager];
     [self setRequestHeaders: headers forManager: manager];
     [self setTimeout:timeoutInSeconds forManager:manager];
     [self setRedirect:followRedirect forManager:manager];
+    [self setResponseSerializer:responseType forManager:manager];
 
     CordovaHttpPlugin* __weak weakSelf = self;
-    manager.responseSerializer = [TextResponseSerializer serializer];
     [[SDNetworkActivityIndicator sharedActivityIndicator] startActivity];
 
     @try {
@@ -330,14 +343,15 @@
     NSDictionary *headers = [command.arguments objectAtIndex:3];
     NSTimeInterval timeoutInSeconds = [[command.arguments objectAtIndex:4] doubleValue];
     bool followRedirect = [[command.arguments objectAtIndex:5] boolValue];
+    NSString *responseType = [command.arguments objectAtIndex:6];
 
     [self setRequestSerializer: serializerName forManager: manager];
     [self setRequestHeaders: headers forManager: manager];
     [self setTimeout:timeoutInSeconds forManager:manager];
     [self setRedirect:followRedirect forManager:manager];
+    [self setResponseSerializer:responseType forManager:manager];
 
     CordovaHttpPlugin* __weak weakSelf = self;
-    manager.responseSerializer = [TextResponseSerializer serializer];
     [[SDNetworkActivityIndicator sharedActivityIndicator] startActivity];
 
     @try {
@@ -373,14 +387,15 @@
     NSDictionary *headers = [command.arguments objectAtIndex:3];
     NSTimeInterval timeoutInSeconds = [[command.arguments objectAtIndex:4] doubleValue];
     bool followRedirect = [[command.arguments objectAtIndex:5] boolValue];
+    NSString *responseType = [command.arguments objectAtIndex:6];
 
     [self setRequestSerializer: serializerName forManager: manager];
     [self setRequestHeaders: headers forManager: manager];
     [self setTimeout:timeoutInSeconds forManager:manager];
     [self setRedirect:followRedirect forManager:manager];
+    [self setResponseSerializer:responseType forManager:manager];
 
     CordovaHttpPlugin* __weak weakSelf = self;
-    manager.responseSerializer = [TextResponseSerializer serializer];
     [[SDNetworkActivityIndicator sharedActivityIndicator] startActivity];
 
     @try {
@@ -406,31 +421,35 @@
     }
 }
 
-- (void)uploadFile:(CDVInvokedUrlCommand*)command {
+- (void)uploadFiles:(CDVInvokedUrlCommand*)command {
     AFHTTPSessionManager *manager = [AFHTTPSessionManager manager];
     manager.securityPolicy = securityPolicy;
 
     NSString *url = [command.arguments objectAtIndex:0];
     NSDictionary *headers = [command.arguments objectAtIndex:1];
-    NSString *filePath = [command.arguments objectAtIndex: 2];
-    NSString *name = [command.arguments objectAtIndex: 3];
+    NSArray *filePaths = [command.arguments objectAtIndex: 2];
+    NSArray *names = [command.arguments objectAtIndex: 3];
     NSTimeInterval timeoutInSeconds = [[command.arguments objectAtIndex:4] doubleValue];
     bool followRedirect = [[command.arguments objectAtIndex:5] boolValue];
-
-    NSURL *fileURL = [NSURL URLWithString: filePath];
+    NSString *responseType = [command.arguments objectAtIndex:6];
 
     [self setRequestHeaders: headers forManager: manager];
     [self setTimeout:timeoutInSeconds forManager:manager];
     [self setRedirect:followRedirect forManager:manager];
+    [self setResponseSerializer:responseType forManager:manager];
 
     CordovaHttpPlugin* __weak weakSelf = self;
-    manager.responseSerializer = [TextResponseSerializer serializer];
     [[SDNetworkActivityIndicator sharedActivityIndicator] startActivity];
 
     @try {
         [manager POST:url parameters:nil constructingBodyWithBlock:^(id<AFMultipartFormData> formData) {
             NSError *error;
-            [formData appendPartWithFileURL:fileURL name:name error:&error];
+            for (int i = 0; i < [filePaths count]; i++) {
+                NSString *filePath = (NSString *) [filePaths objectAtIndex:i];
+                NSString *uploadName = (NSString *) [names objectAtIndex:i];
+                NSURL *fileURL = [NSURL URLWithString: filePath];
+                [formData appendPartWithFileURL:fileURL name:uploadName error:&error];
+            }
             if (error) {
                 NSMutableDictionary *dictionary = [NSMutableDictionary dictionary];
                 [dictionary setObject:[NSNumber numberWithInt:500] forKey:@"status"];
@@ -465,6 +484,7 @@
 - (void)downloadFile:(CDVInvokedUrlCommand*)command {
     AFHTTPSessionManager *manager = [AFHTTPSessionManager manager];
     manager.securityPolicy = securityPolicy;
+    manager.responseSerializer = [AFHTTPResponseSerializer serializer];
 
     NSString *url = [command.arguments objectAtIndex:0];
     NSDictionary *headers = [command.arguments objectAtIndex:1];
@@ -481,7 +501,6 @@
     }
 
     CordovaHttpPlugin* __weak weakSelf = self;
-    manager.responseSerializer = [AFHTTPResponseSerializer serializer];
     [[SDNetworkActivityIndicator sharedActivityIndicator] startActivity];
 
     @try {

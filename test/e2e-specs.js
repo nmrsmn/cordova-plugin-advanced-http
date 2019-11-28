@@ -3,6 +3,11 @@ const hooks = {
     cordova.plugin.http.clearCookies();
 
     helpers.enableFollowingRedirect(function() {
+      // server trust mode is not supported on brpwser platform
+      if (cordova.platformId === 'browser') {
+        return resolve();
+      }
+
       helpers.setDefaultServerTrustMode(function () {
         // @TODO: not ready yet
         // helpers.setNoneClientAuthMode(resolve, reject);
@@ -57,6 +62,18 @@ const helpers = {
         }, done);
       }, done);
     }, done);
+  },
+  // adopted from: https://werxltd.com/wp/2010/05/13/javascript-implementation-of-javas-string-hashcode-method/
+  hashArrayBuffer: function (buffer) {
+    var hash = 0;
+    var byteArray = new Uint8Array(buffer);
+
+    for (var i = 0; i < byteArray.length; i++) {
+      hash  = ((hash << 5) - hash) + byteArray[i];
+      hash |= 0; // Convert to 32bit integer
+    }
+
+    return hash;
   }
 };
 
@@ -333,6 +350,43 @@ const tests = [
     }
   },
   {
+    description: 'should upload multiple files from given paths in local filesystem to given URL #127',
+    expected: 'resolved: {"status": 200, "data": "files": {"test-file.txt": "I am a dummy file. I am used ...',
+    func: function (resolve, reject) {
+      var fileName = 'test-file.txt';
+      var fileName2 = 'test-file2.txt';
+
+      var fileContent = 'I am a dummy file. I am used for testing purposes!';
+      var fileContent2 = 'I am the second dummy file. I am used for testing purposes!';
+
+      var sourcePath = cordova.file.cacheDirectory + fileName;
+      var sourcePath2 = cordova.file.cacheDirectory + fileName2;
+
+      var targetUrl = 'http://httpbin.org/post';
+
+      helpers.writeToFile(function () {
+        helpers.writeToFile(function() {
+          cordova.plugin.http.uploadFile(targetUrl, {}, {}, [sourcePath, sourcePath2], [fileName, fileName2], resolve, reject);
+        }, fileName2, fileContent2);
+      }, fileName, fileContent);
+    },
+    validationFunc: function (driver, result) {
+      var fileName = 'test-file.txt';
+      var fileName2 = 'test-file2.txt';
+
+      var fileContent = 'I am a dummy file. I am used for testing purposes!';
+      var fileContent2 = 'I am the second dummy file. I am used for testing purposes!';
+
+      result.type.should.be.equal('resolved');
+      result.data.data.should.be.a('string');
+
+      var parsed = JSON.parse(result.data.data);
+
+      parsed.files[fileName].should.be.equal(fileContent);
+      parsed.files[fileName2].should.be.equal(fileContent2);
+    }
+  },
+  {
     description: 'should encode HTTP array params correctly (GET) #45',
     expected: 'resolved: {"status": 200, "data": "{\\"url\\":\\"http://httpbin.org/get?myArray[]=val1&myArray[]=val2&myArray[]=val3\\"}\" ...',
     func: function (resolve, reject) {
@@ -356,7 +410,7 @@ const tests = [
     },
     validationFunc: function (driver, result) {
       result.type.should.be.equal('throwed');
-      result.message.should.be.equal('advanced-http: header values must be strings');
+      result.message.should.be.equal(require('../www/messages').TYPE_MISMATCH_HEADERS);
     }
   },
   {
@@ -367,7 +421,7 @@ const tests = [
     },
     validationFunc: function (driver, result) {
       result.type.should.be.equal('throwed');
-      result.message.should.be.equal('advanced-http: header values must be strings');
+      result.message.should.be.equal(require('../www/messages').INVALID_HEADER_VALUE);
     }
   },
   {
@@ -624,6 +678,118 @@ const tests = [
       result.data.content.should.be.equal("<?xml version='1.0' encoding='us-ascii'?>\n\n<!--  A SAMPLE set of slides  -->\n\n<slideshow \n    title=\"Sample Slide Show\"\n    date=\"Date of publication\"\n    author=\"Yours Truly\"\n    >\n\n    <!-- TITLE SLIDE -->\n    <slide type=\"all\">\n      <title>Wake up to WonderWidgets!</title>\n    </slide>\n\n    <!-- OVERVIEW -->\n    <slide type=\"all\">\n        <title>Overview</title>\n        <item>Why <em>WonderWidgets</em> are great</item>\n        <item/>\n        <item>Who <em>buys</em> WonderWidgets</item>\n    </slide>\n\n</slideshow>");
     }
   },
+  {
+    description: 'should return header object when request failed due to non-success response from server #221',
+    expected: 'rejected:',
+    func: function (resolve, reject) { cordova.plugin.http.get('https://httpbin.org/status/418', {}, {}, resolve, reject); },
+    validationFunc: function (driver, result) {
+      result.type.should.be.equal('rejected');
+      result.data.headers.should.be.an('object');
+    }
+  },
+  {
+    description: 'should return status code when request failed due to non-success response from server',
+    expected: 'rejected:',
+    func: function (resolve, reject) { cordova.plugin.http.get('https://httpbin.org/status/418', {}, {}, resolve, reject); },
+    validationFunc: function (driver, result) {
+      result.type.should.be.equal('rejected');
+      result.data.status.should.be.equal(418);
+    }
+  },
+  {
+    description: 'should return url string when request failed due to non-success response from server',
+    expected: 'rejected:',
+    func: function (resolve, reject) { cordova.plugin.http.get('https://httpbin.org/status/418', {}, {}, resolve, reject); },
+    validationFunc: function (driver, result) {
+      result.type.should.be.equal('rejected');
+      result.data.url.should.be.equal('https://httpbin.org/status/418');
+    }
+  },
+  {
+    description: 'shouldn\'t return header object when request failed before receiving response from server',
+    expected: 'rejected:',
+    func: function (resolve, reject) { cordova.plugin.http.get('https://not_existing_url', {}, {}, resolve, reject); },
+    validationFunc: function (driver, result) {
+      result.type.should.be.equal('rejected');
+      should.equal(result.data.headers, undefined);
+    }
+  },
+  {
+    description: 'should return status code when request failed before receiving response from server',
+    expected: 'rejected:',
+    func: function (resolve, reject) { cordova.plugin.http.get('https://not_existing_url', {}, {}, resolve, reject); },
+    validationFunc: function (driver, result) {
+      result.type.should.be.equal('rejected');
+      result.data.status.should.be.a('number');
+    }
+  },
+  {
+    description: 'shouldn\'t return url string when request failed before receiving response from server',
+    expected: 'rejected:',
+    func: function (resolve, reject) { cordova.plugin.http.get('https://not_existing_url', {}, {}, resolve, reject); },
+    validationFunc: function (driver, result) {
+      result.type.should.be.equal('rejected');
+      should.equal(result.data.url, undefined);
+    }
+  },
+  {
+    description: 'should fetch binary correctly when response type is "arraybuffer"',
+    expected: 'resolved: {"isArrayBuffer:true,"hash":-1032603775,"byteLength":35588}',
+    func: function (resolve, reject) {
+      var url = 'https://httpbin.org/image/jpeg';
+      var options = { method: 'get', responseType: 'arraybuffer' };
+      var success = function (response) {
+        resolve({
+          isArrayBuffer: response.data.constructor === ArrayBuffer,
+          hash: helpers.hashArrayBuffer(response.data),
+          byteLength: response.data.byteLength
+        });
+      };
+      cordova.plugin.http.sendRequest(url, options, success, reject);
+    },
+    validationFunc: function (driver, result) {
+      result.type.should.be.equal('resolved');
+      result.data.isArrayBuffer.should.be.equal(true);
+      result.data.hash.should.be.equal(-1032603775);
+      result.data.byteLength.should.be.equal(35588);
+    }
+  },
+  {
+    description: 'should fetch binary correctly when response type is "blob"',
+    expected: 'resolved: {"isBlob":true,byteLength":35588}',
+    func: function (resolve, reject) {
+      var url = 'https://httpbin.org/image/jpeg';
+      var options = { method: 'get', responseType: 'blob' };
+      var success = function (response) {
+        resolve({
+          isBlob: response.data.constructor === Blob,
+          type: response.data.type,
+          byteLength: response.data.size
+        });
+      };
+      cordova.plugin.http.sendRequest(url, options, success, reject);
+    },
+    validationFunc: function (driver, result) {
+      result.type.should.be.equal('resolved');
+      result.data.isBlob.should.be.equal(true);
+      result.data.type.should.be.equal('image/jpeg');
+      result.data.byteLength.should.be.equal(35588);
+    }
+  },
+  {
+    description: 'should decode error body even if response type is "arraybuffer"',
+    expected: 'rejected: {"status": 418, ...',
+    func: function (resolve, reject) {
+      var url = 'https://httpbin.org/status/418';
+      var options = { method: 'get', responseType: 'arraybuffer' };
+      cordova.plugin.http.sendRequest(url, options, resolve, reject);
+    },
+    validationFunc: function (driver, result) {
+      result.type.should.be.equal('rejected');
+      result.data.status.should.be.equal(418);
+      result.data.error.should.be.equal("\n    -=[ teapot ]=-\n\n       _...._\n     .'  _ _ `.\n    | .\"` ^ `\". _,\n    \\_;`\"---\"`|//\n      |       ;/\n      \\_     _/\n        `\"\"\"`\n");
+    }
+  }
   // @TODO: not ready yet
   // {
   //   description: 'should authenticate correctly when client cert auth is configured with a PKCS12 container',
