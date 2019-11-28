@@ -1,6 +1,13 @@
 const chai = require('chai');
 const mock = require('mock-require');
+const util = require('util');
 const should = chai.should();
+
+const BlobMock = require('./mocks/Blob.mock');
+const ConsoleMock = require('./mocks/Console.mock');
+const FileMock = require('./mocks/File.mock');
+const FileReaderMock = require('./mocks/FileReader.mock');
+const FormDataMock = require('./mocks/FormData.mock');
 
 describe('Advanced HTTP public interface', function () {
   const messages = require('../www/messages');
@@ -17,7 +24,7 @@ describe('Advanced HTTP public interface', function () {
     const errorCodes = require('../www/error-codes');
     const WebStorageCookieStore = require('../www/local-storage-store')(ToughCookie, lodash);
     const cookieHandler = require('../www/cookie-handler')(null, ToughCookie, WebStorageCookieStore);
-    const helpers = require('../www/helpers')(jsUtil, cookieHandler, messages, errorCodes);
+    const helpers = require('../www/helpers')(null, jsUtil, cookieHandler, messages, errorCodes);
     const urlUtil = require('../www/url-util')(jsUtil);
 
     return { exec: noop, cookieHandler, urlUtil: urlUtil, helpers, globalConfigs, errorCodes };
@@ -29,7 +36,7 @@ describe('Advanced HTTP public interface', function () {
 
   beforeEach(() => {
     // mocked btoa function (base 64 encoding strings)
-    global.btoa = decoded => new Buffer(decoded).toString('base64');
+    global.btoa = decoded => Buffer.from(decoded).toString('base64');
     loadHttp(getDependenciesBlueprint());
   });
 
@@ -265,13 +272,13 @@ describe('Common helpers', function () {
     const init = require('../www/helpers');
     init.debug = true;
 
-    const helpers = init(null, null, null);
+    const helpers = init(null, null, null, null, null, null);
 
     it('merges empty header sets correctly', () => {
       helpers.mergeHeaders({}, {}).should.eql({});
     });
 
-    it('merges ssimple header sets without collision correctly', () => {
+    it('merges simple header sets without collision correctly', () => {
       helpers.mergeHeaders({ a: 1 }, { b: 2 }).should.eql({ a: 1, b: 2 });
     });
 
@@ -282,13 +289,13 @@ describe('Common helpers', function () {
 
   describe('getCookieHeader(url)', function () {
     it('resolves cookie header correctly when no cookie is set #198', () => {
-      const helpers = require('../www/helpers')(null, { getCookieString: () => '' }, null);
+      const helpers = require('../www/helpers')(null, null, { getCookieString: () => '' }, null);
 
       helpers.getCookieHeader('http://ilkimen.net').should.eql({});
     });
 
     it('resolves cookie header correctly when a cookie is set', () => {
-      const helpers = require('../www/helpers')(null, { getCookieString: () => 'cookie=value' }, null);
+      const helpers = require('../www/helpers')(null, null, { getCookieString: () => 'cookie=value' }, null);
 
       helpers.getCookieHeader('http://ilkimen.net').should.eql({ Cookie: 'cookie=value' });
     });
@@ -297,7 +304,7 @@ describe('Common helpers', function () {
   describe('checkClientAuthOptions()', function () {
     const jsUtil = require('../www/js-util');
     const messages = require('../www/messages');
-    const helpers = require('../www/helpers')(jsUtil, null, messages);
+    const helpers = require('../www/helpers')(null, jsUtil, null, messages);
 
     it('returns options object with empty values when mode is "none" and no options are given', () => {
       helpers.checkClientAuthOptions('none').should.eql({
@@ -362,7 +369,7 @@ describe('Common helpers', function () {
   describe('handleMissingOptions()', function () {
     const jsUtil = require('../www/js-util');
     const messages = require('../www/messages');
-    const helpers = require('../www/helpers')(jsUtil, null, messages);
+    const helpers = require('../www/helpers')(null, jsUtil, null, messages);
     const mockGlobals = {
       headers: {},
       serializer: 'urlencoded',
@@ -394,7 +401,7 @@ describe('Common helpers', function () {
     };
 
     it('does not change response data if it is an ArrayBuffer', () => {
-      const helpers = require('../www/helpers')(jsUtil, null, messages, null, errorCodes);
+      const helpers = require('../www/helpers')(null, jsUtil, null, messages, null, errorCodes);
       const buffer = new ArrayBuffer(5);
       const handler = helpers.injectRawResponseHandler(
         'arraybuffer',
@@ -406,7 +413,7 @@ describe('Common helpers', function () {
 
     it('does not change response data if it is a Blob', () => {
       const fakeJsUtil = { getTypeOf: () => 'Blob' };
-      const helpers = require('../www/helpers')(fakeJsUtil, null, messages, null, errorCodes);
+      const helpers = require('../www/helpers')(null, fakeJsUtil, null, messages, null, errorCodes);
       const handler = helpers.injectRawResponseHandler(
         'blob',
         response => response.data.should.be.equal('fakeData')
@@ -416,7 +423,7 @@ describe('Common helpers', function () {
     });
 
     it('does not change response data if response type is "text"', () => {
-      const helpers = require('../www/helpers')(jsUtil, null, messages, null, errorCodes);
+      const helpers = require('../www/helpers')(null, jsUtil, null, messages, null, errorCodes);
       const example = 'exampleText';
       const handler = helpers.injectRawResponseHandler(
         'text',
@@ -428,7 +435,7 @@ describe('Common helpers', function () {
 
     it('handles response type "json" correctly', () => {
       const fakeData = { myString: 'bla', myNumber: 10 };
-      const helpers = require('../www/helpers')(jsUtil, null, messages, null, errorCodes);
+      const helpers = require('../www/helpers')(null, jsUtil, null, messages, null, errorCodes);
       const handler = helpers.injectRawResponseHandler(
         'json',
         response => response.data.should.be.eql(fakeData)
@@ -438,7 +445,7 @@ describe('Common helpers', function () {
     });
 
     it('handles response type "arraybuffer" correctly', () => {
-      const helpers = require('../www/helpers')(jsUtil, null, messages, fakeBase64, errorCodes);
+      const helpers = require('../www/helpers')(null, jsUtil, null, messages, fakeBase64, errorCodes);
       const handler = helpers.injectRawResponseHandler(
         'arraybuffer',
         response => response.data.should.be.equal('fakeArrayBuffer')
@@ -448,7 +455,7 @@ describe('Common helpers', function () {
     });
 
     it('handles response type "blob" correctly', () => {
-      const helpers = require('../www/helpers')(jsUtil, null, messages, fakeBase64, errorCodes);
+      const helpers = require('../www/helpers')(null, jsUtil, null, messages, fakeBase64, errorCodes);
       const handler = helpers.injectRawResponseHandler(
         'blob',
         (response) => {
@@ -462,7 +469,7 @@ describe('Common helpers', function () {
     });
 
     it('calls failure callback when post-processing fails', () => {
-      const helpers = require('../www/helpers')(jsUtil, null, messages, fakeBase64, errorCodes);
+      const helpers = require('../www/helpers')(null, jsUtil, null, messages, fakeBase64, errorCodes);
       const handler = helpers.injectRawResponseHandler(
         'json',
         null,
@@ -476,10 +483,10 @@ describe('Common helpers', function () {
     });
   });
 
-  describe('checkUploadFileOptions()', function() {
+  describe('checkUploadFileOptions()', function () {
     const jsUtil = require('../www/js-util');
     const messages = require('../www/messages');
-    const helpers = require('../www/helpers')(jsUtil, null, messages, null, null);
+    const helpers = require('../www/helpers')(null, jsUtil, null, messages, null, null);
 
     it('checks valid file options correctly', () => {
       const opts = {
@@ -508,4 +515,232 @@ describe('Common helpers', function () {
       (() => helpers.checkUploadFileOptions(['file://path/to/file.png'], [1])).should.throw(messages.NAMES_TYPE_MISMATCH);
     });
   });
-})
+
+  describe('processData()', function () {
+    const mockWindow = {
+      Blob: BlobMock,
+      File: FileMock,
+      FileReader: FileReaderMock,
+      FormData: FormDataMock,
+      TextEncoder: util.TextEncoder,
+    }
+
+    const base64 = { fromArrayBuffer: ab => Buffer.from(ab).toString('base64') };
+    const jsUtil = require('../www/js-util');
+    const messages = require('../www/messages');
+    const dependencyValidator = require('../www/dependency-validator')(mockWindow, null, messages);
+    const helpers = require('../www/helpers')(mockWindow, jsUtil, null, messages, base64, null, dependencyValidator, {});
+
+    const testString = 'Test String öäüß 👍😉';
+    const testStringBase64 = Buffer.from(testString).toString('base64');
+
+    it('throws an error when given data does not match allowed data types', () => {
+      (() => helpers.processData('myString', 'urlencoded')).should.throw(messages.TYPE_MISMATCH_DATA);
+      (() => helpers.processData('myString', 'json')).should.throw(messages.TYPE_MISMATCH_DATA);
+      (() => helpers.processData({}, 'utf8')).should.throw(messages.TYPE_MISMATCH_DATA);
+    });
+
+    it('throws an error when given data does not match allowed instance types', () => {
+      (() => helpers.processData('myString', 'multipart')).should.throw(messages.INSTANCE_TYPE_MISMATCH_DATA);
+    });
+
+    it('processes data correctly when serializer "utf8" is configured', (cb) => {
+      helpers.processData('myString', 'utf8', (data) => {
+        data.should.be.eql({text: 'myString'});
+        cb();
+      })
+    });
+
+    it('processes data correctly when serializer "multipart" is configured and form data contains string value', (cb) => {
+      const formData = new FormDataMock();
+      formData.append('myString', testString);
+
+      helpers.processData(formData, 'multipart', (data) => {
+        data.buffers.length.should.be.equal(1);
+        data.names.length.should.be.equal(1);
+        data.fileNames.length.should.be.equal(1);
+        data.types.length.should.be.equal(1);
+
+        data.buffers[0].should.be.eql(testStringBase64);
+        data.names[0].should.be.equal('myString');
+        should.equal(data.fileNames[0], null);
+        data.types[0].should.be.equal('text/plain');
+
+
+        cb();
+      });
+    });
+
+    it('processes data correctly when serializer "multipart" is configured and form data contains file value', (cb) => {
+      const formData = new FormDataMock();
+      formData.append('myFile', new BlobMock([testString], { type: 'application/octet-stream' }));
+
+      helpers.processData(formData, 'multipart', (data) => {
+        data.buffers.length.should.be.equal(1);
+        data.names.length.should.be.equal(1);
+        data.fileNames.length.should.be.equal(1);
+        data.types.length.should.be.equal(1);
+
+        data.buffers[0].should.be.eql(testStringBase64);
+        data.names[0].should.be.equal('myFile');
+        data.fileNames[0].should.be.equal('blob');
+        data.types[0].should.be.equal('application/octet-stream');
+
+        cb();
+      });
+    });
+  });
+});
+
+describe('Dependency Validator', function () {
+  const messages = require('../www/messages');
+
+  describe('logWarnings()', function () {
+    it('logs a warning message if FormData API is not supported', function () {
+      const console = new ConsoleMock();
+
+      require('../www/dependency-validator')({}, console, messages).logWarnings();
+
+      console.messageList.length.should.be.equal(1);
+      console.messageList[0].type.should.be.equal('warn');
+      console.messageList[0].message.should.be.eql([messages.MISSING_FORMDATA_API]);
+    });
+
+    it('logs a warning message if FormData.entries() API is not supported', function () {
+      const console = new ConsoleMock();
+
+      require('../www/dependency-validator')({ FormData: {} }, console, messages).logWarnings();
+
+      console.messageList.length.should.be.equal(1);
+      console.messageList[0].type.should.be.equal('warn');
+      console.messageList[0].message.should.be.eql([messages.MISSING_FORMDATA_ENTRIES_API]);
+    });
+  });
+
+  describe('checkBlobApi()', function () {
+    it('throws an error if Blob API is not supported', function () {
+      const console = new ConsoleMock();
+      const validator = require('../www/dependency-validator')({}, console, messages);
+
+      (() => validator.checkBlobApi()).should.throw(messages.MISSING_BLOB_API);
+    });
+  });
+
+  describe('checkFileReaderApi()', function () {
+    it('throws an error if FileReader API is not supported', function () {
+      const console = new ConsoleMock();
+      const validator = require('../www/dependency-validator')({}, console, messages);
+
+      (() => validator.checkFileReaderApi()).should.throw(messages.MISSING_FILE_READER_API);
+    });
+  });
+
+  describe('checkFormDataInstance()', function () {
+    it('throws an error if FormData.entries() is not supported on given instance', function () {
+      const console = new ConsoleMock();
+      const validator = require('../www/dependency-validator')({ FormData: {}}, console, messages);
+
+      (() => validator.checkFormDataInstance({})).should.throw(messages.MISSING_FORMDATA_ENTRIES_API);
+    });
+  });
+
+  describe('checkTextEncoderApi()', function () {
+    it('throws an error if TextEncoder API is not supported', function () {
+      const console = new ConsoleMock();
+      const validator = require('../www/dependency-validator')({}, console, messages);
+
+      (() => validator.checkTextEncoderApi()).should.throw(messages.MISSING_TEXT_ENCODER_API);
+    });
+  });
+});
+
+describe('Ponyfills', function () {
+  const mockWindow = {
+    Blob: BlobMock,
+    File: FileMock,
+  };
+
+  const init = require('../www/ponyfills');
+  init.debug = true;
+  const ponyfills = init(mockWindow);
+
+  describe('Iterator', function () {
+    it('exposes interface correctly', () => {
+      const iterator = new ponyfills.Iterator([]);
+      iterator.next.should.be.a('function');
+    });
+
+    describe('next()', function () {
+      it('returns iteration object correctly when list is empty', () => {
+        const iterator = new ponyfills.Iterator([]);
+        iterator.next().should.be.eql({ done: true, value: undefined });
+      });
+  
+      it('returns iteration object correctly when end posititon of list is not reached yet', () => {
+        const iterator = new ponyfills.Iterator([['first', 'this is the first item']]);
+        iterator.next().should.be.eql({ done: false, value: ['first', 'this is the first item'] });
+      });
+  
+      it('returns iteration object correctly when end posititon of list is already reached', () => {
+        const iterator = new ponyfills.Iterator([['first', 'this is the first item']]);
+        iterator.next();
+        iterator.next().should.be.eql({ done: true, value: undefined });
+      });
+    });
+  });
+
+  describe('FormData', function () {
+    it('exposes interface correctly', () => {
+      const formData = new ponyfills.FormData();
+
+      formData.append.should.be.a('function');
+      formData.entries.should.be.a('function');
+    });
+
+    describe('append()', function () {
+      it('appends string value correctly', () => {
+        const formData = new ponyfills.FormData();
+
+        formData.append('test', 'myTestString');
+        formData.__items[0].should.be.eql(['test', 'myTestString']);
+      });
+
+      it('appends numeric value correctly', () => {
+        const formData = new ponyfills.FormData();
+
+        formData.append('test', 10);
+        formData.__items[0].should.be.eql(['test', '10']);
+        formData.__items[0][1].should.be.a('string');
+      });
+
+      it('appends Blob value correctly', () => {
+        const formData = new ponyfills.FormData();
+        const blob = new BlobMock(['another test'], { type: 'text/plain' });
+
+        formData.append('myBlob', blob, 'myFileName.txt');
+        formData.__items[0].should.be.eql(['myBlob', blob]);
+        formData.__items[0][1].name.should.be.equal('myFileName.txt');
+        formData.__items[0][1].lastModifiedDate.should.be.a('Date');
+      });
+
+      it('appends File value correctly', () => {
+        const formData = new ponyfills.FormData();
+        const blob = new BlobMock(['another test'], { type: 'text/plain' });
+        const file = new FileMock(blob, 'myFileName.txt');
+
+        formData.append('myFile', file, 'myOverriddenFileName.txt');
+        formData.__items[0].should.be.eql(['myFile', file]);
+        formData.__items[0][1].name.should.be.equal('myFileName.txt');
+        formData.__items[0][1].lastModifiedDate.should.be.eql(file.lastModifiedDate);
+      });
+    });
+
+    describe('entries()', function () {
+      it('returns an iterator correctly', () => {
+        const formData = new ponyfills.FormData();
+
+        formData.entries().should.be.an.instanceof(ponyfills.Iterator);
+      })
+    });
+  });
+});

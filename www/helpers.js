@@ -1,5 +1,5 @@
-module.exports = function init(jsUtil, cookieHandler, messages, base64, errorCodes) {
-  var validSerializers = ['urlencoded', 'json', 'utf8'];
+module.exports = function init(global, jsUtil, cookieHandler, messages, base64, errorCodes, dependencyValidator, ponyfills) {
+  var validSerializers = ['urlencoded', 'json', 'utf8', 'multipart'];
   var validCertModes = ['default', 'nocheck', 'pinned', 'legacy'];
   var validClientAuthModes = ['none', 'systemstore', 'buffer'];
   var validHttpMethods = ['get', 'put', 'post', 'patch', 'head', 'delete', 'upload', 'download'];
@@ -18,7 +18,7 @@ module.exports = function init(jsUtil, cookieHandler, messages, base64, errorCod
     checkTimeoutValue: checkTimeoutValue,
     checkUploadFileOptions: checkUploadFileOptions,
     getMergedHeaders: getMergedHeaders,
-    getProcessedData: getProcessedData,
+    processData: processData,
     handleMissingCallbacks: handleMissingCallbacks,
     handleMissingOptions: handleMissingOptions,
     injectCookieHandler: injectCookieHandler,
@@ -270,7 +270,7 @@ module.exports = function init(jsUtil, cookieHandler, messages, base64, errorCod
     entry.isFile = rawEntry.isFile;
     entry.name = rawEntry.name;
     entry.fullPath = rawEntry.fullPath;
-    entry.filesystem = new FileSystem(rawEntry.filesystemName || (rawEntry.filesystem == window.PERSISTENT ? 'persistent' : 'temporary'));
+    entry.filesystem = new FileSystem(rawEntry.filesystemName || (rawEntry.filesystem == global.PERSISTENT ? 'persistent' : 'temporary'));
     entry.nativeURL = rawEntry.nativeURL;
 
     return entry;
@@ -363,24 +363,101 @@ module.exports = function init(jsUtil, cookieHandler, messages, base64, errorCod
         return ['String'];
       case 'urlencoded':
         return ['Object'];
-      default:
+      case 'json':
         return ['Array', 'Object'];
+      default:
+        return [];
     }
   }
 
-  function getProcessedData(data, dataSerializer) {
+  function getAllowedInstanceTypes(dataSerializer) {
+    return dataSerializer === 'multipart' ? ['FormData'] : null;
+  }
+
+  function processData(data, dataSerializer, cb) {
     var currentDataType = jsUtil.getTypeOf(data);
     var allowedDataTypes = getAllowedDataTypes(dataSerializer);
+    var allowedInstanceTypes = getAllowedInstanceTypes(dataSerializer);
 
-    if (allowedDataTypes.indexOf(currentDataType) === -1) {
+    if (allowedInstanceTypes) {
+      var isCorrectInstanceType = false;
+
+      allowedInstanceTypes.forEach(function(type) {
+        if ((global[type] && data instanceof global[type]) || (ponyfills[type] && data instanceof ponyfills[type])) {
+          isCorrectInstanceType = true;
+        }
+      });
+
+      if (!isCorrectInstanceType) {
+        throw new Error(messages.INSTANCE_TYPE_MISMATCH_DATA + ' ' + allowedInstanceTypes.join(', '));
+      }
+    }
+
+    if (!allowedInstanceTypes && allowedDataTypes.indexOf(currentDataType) === -1) {
       throw new Error(messages.TYPE_MISMATCH_DATA + ' ' + allowedDataTypes.join(', '));
     }
 
-    if (dataSerializer === 'utf8') {
-      data = { text: data };
+    switch (dataSerializer) {
+      case 'utf8':
+        return cb({ text: data });
+      case 'multipart':
+        return processFormData(data, cb);
+      default:
+        return cb(data);
+    }
+  }
+
+  function processFormData(data, cb) {
+    dependencyValidator.checkBlobApi();
+    dependencyValidator.checkFileReaderApi();
+    dependencyValidator.checkTextEncoderApi();
+    dependencyValidator.checkFormDataInstance(data);
+
+    var textEncoder = new global.TextEncoder('utf8');
+    var iterator = data.entries();
+
+    var result = {
+      buffers: [],
+      names: [],
+      fileNames: [],
+      types: []
+    };
+
+    processFormDataIterator(iterator, textEncoder, result, cb);
+  }
+
+  function processFormDataIterator(iterator, textEncoder, result, onFinished) {
+    var entry = iterator.next();
+
+    if (entry.done) {
+      return onFinished(result);
     }
 
-    return data;
+    if (entry.value[1] instanceof global.Blob || entry.value[1] instanceof global.File) {
+      var reader = new global.FileReader();
+
+      reader.onload = function() {
+        result.buffers.push(base64.fromArrayBuffer(reader.result));
+        result.names.push(entry.value[0]);
+        result.fileNames.push(entry.value[1].name || 'blob');
+        result.types.push(entry.value[1].type || '');
+        processFormDataIterator(iterator, textEncoder, result, onFinished);
+      };
+
+      return reader.readAsArrayBuffer(entry.value[1]);
+    }
+
+    if (jsUtil.getTypeOf(entry.value[1]) === 'String') {
+      result.buffers.push(base64.fromArrayBuffer(textEncoder.encode(entry.value[1]).buffer));
+      result.names.push(entry.value[0]);
+      result.fileNames.push(null);
+      result.types.push('text/plain');
+
+      return processFormDataIterator(iterator, textEncoder, result, onFinished)
+    }
+
+    // skip items which are not supported
+    processFormDataIterator(iterator, textEncoder, result, onFinished);
   }
 
   function handleMissingCallbacks(successFn, failFn) {

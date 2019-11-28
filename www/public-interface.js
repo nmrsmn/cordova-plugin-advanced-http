@@ -1,4 +1,4 @@
-module.exports = function init(exec, cookieHandler, urlUtil, helpers, globalConfigs, errorCodes) {
+module.exports = function init(exec, cookieHandler, urlUtil, helpers, globalConfigs, errorCodes, ponyfills) {
   var publicInterface = {
     getBasicAuthHeader: getBasicAuthHeader,
     useBasicAuth: useBasicAuth,
@@ -29,7 +29,8 @@ module.exports = function init(exec, cookieHandler, urlUtil, helpers, globalConf
     head: head,
     uploadFile: uploadFile,
     downloadFile: downloadFile,
-    ErrorCode: errorCodes
+    ErrorCode: errorCodes,
+    ponyfills: ponyfills
   };
 
   function getBasicAuthHeader(username, password) {
@@ -152,8 +153,9 @@ module.exports = function init(exec, cookieHandler, urlUtil, helpers, globalConf
       case 'post':
       case 'put':
       case 'patch':
-        var data = helpers.getProcessedData(options.data, options.serializer);
-        return exec(onSuccess, onFail, 'CordovaHttpPlugin', options.method, [url, data, options.serializer, headers, options.timeout, options.followRedirect, options.responseType]);
+        return helpers.processData(options.data, options.serializer, function(data) {
+          exec(onSuccess, onFail, 'CordovaHttpPlugin', options.method, [url, data, options.serializer, headers, options.timeout, options.followRedirect, options.responseType]);
+        });
       case 'upload':
         var fileOptions = helpers.checkUploadFileOptions(options.filePath, options.name);
         return exec(onSuccess, onFail, 'CordovaHttpPlugin', 'uploadFiles', [url, headers, fileOptions.filePaths, fileOptions.names, options.timeout, options.followRedirect, options.responseType]);
